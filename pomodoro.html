@@ -241,9 +241,9 @@
     return `${m}:${s}`;
   }
 
-  // 15秒刻みのプルダウンを生成する
+  // 15秒刻みのプルダウンを生成する（0分を含む）
   function populateTimeSelect(select, maxSeconds, defaultSeconds) {
-    for (let seconds = STEP_SECONDS; seconds <= maxSeconds; seconds += STEP_SECONDS) {
+    for (let seconds = 0; seconds <= maxSeconds; seconds += STEP_SECONDS) {
       const option = document.createElement('option');
       option.value = seconds;
       option.textContent = formatTime(seconds);
@@ -252,8 +252,40 @@
     select.value = defaultSeconds;
   }
 
-  populateTimeSelect(focusSelect, FOCUS_MAX_SECONDS, 25 * 60);
-  populateTimeSelect(breakSelect, BREAK_MAX_SECONDS, 5 * 60);
+  const SETTINGS_STORAGE_KEY = 'pomodoro-settings';
+
+  // 前回保存した設定を読み込む（値が不正・未保存の場合はnullを返す）
+  function loadSavedSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const focus = Number(parsed.focusSeconds);
+      const brk = Number(parsed.breakSeconds);
+      if (!Number.isInteger(focus) || !Number.isInteger(brk)) return null;
+      if (focus < 0 || focus > FOCUS_MAX_SECONDS) return null;
+      if (brk < 0 || brk > BREAK_MAX_SECONDS) return null;
+      return { focusSeconds: focus, breakSeconds: brk };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
+        focusSeconds: FOCUS_TIME,
+        breakSeconds: BREAK_TIME,
+      }));
+    } catch (e) {
+      console.warn('設定の保存に失敗しました', e);
+    }
+  }
+
+  const savedSettings = loadSavedSettings();
+
+  populateTimeSelect(focusSelect, FOCUS_MAX_SECONDS, savedSettings ? savedSettings.focusSeconds : 0);
+  populateTimeSelect(breakSelect, BREAK_MAX_SECONDS, savedSettings ? savedSettings.breakSeconds : 0);
 
   let FOCUS_TIME = Number(focusSelect.value); // 集中時間（秒）
   let BREAK_TIME = Number(breakSelect.value); // 休憩時間（秒）
@@ -387,6 +419,7 @@
 
   focusSelect.addEventListener('change', () => {
     FOCUS_TIME = Number(focusSelect.value);
+    saveSettings();
     if (isFocusMode && !isRunning) {
       remainingSeconds = FOCUS_TIME;
       updateDisplay();
@@ -395,6 +428,7 @@
 
   breakSelect.addEventListener('change', () => {
     BREAK_TIME = Number(breakSelect.value);
+    saveSettings();
     if (!isFocusMode && !isRunning) {
       remainingSeconds = BREAK_TIME;
       updateDisplay();
